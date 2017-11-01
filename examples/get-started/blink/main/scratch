@@ -1,0 +1,115 @@
+
+void xmReadBytes(uint8_t subAddress, uint8_t * dest, uint8_t count)
+{
+	i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+}
+
+static esp_err_t read_xm(uint8_t subaddr, uint8_t* data_rd, size_t size){
+	return i2c_master_read_slave(I2C_EXAMPLE_MASTER_NUM, XM_ADDR, subaddr, data_rd, size);
+}
+
+static esp_err_t write_xm(uint8_t subaddr, uint8_t* data_wr, size_t size){
+	return i2c_master_read_slave(I2C_EXAMPLE_MASTER_NUM, XM_ADDR, subaddr, data_wr, size);
+}
+
+static esp_err_t i2c_master_read_slave(i2c_port_t i2c_num, uint8_t slave_addr,
+		                               uint8_t subaddr, uint8_t* data_rd, size_t size)
+{
+	/**
+	 * @brief Make i2c master read bytes from slave subaddress.
+	 *        @note
+	 *        Only call this function in I2C master mode
+	 *
+	 * @param i2c_num i2c port to use
+	 * @param slave_addr address of i2c slave to rea dfrom
+	 * @param subaddr register to read from
+	 * @param data_rd array to read bytes into
+	 * @param size bytes to read
+	 *
+	 * @return
+	 *     - ESP_OK Success
+	 *     - ESP_ERR_INVALID_ARG Parameter error
+	 */
+
+	esp_err_t ret;
+    if (size == 0) {
+        return ESP_OK;
+    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, ( slave_addr << 1 ) | WRITE_BIT, ACK_CHECK_EN);
+    if (size > 1){
+    	// MSb of SUB field has to be '1' in order for SUB to automatically
+    	// increment to enable multiple data reads/writes.
+    	i2c_master_write_byte(cmd, (subaddr | 0x80), ACK_CHECK_EN);
+    } else {
+    	i2c_master_write_byte(cmd, subaddr, ACK_CHECK_EN);
+    }
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
+    vTaskDelay(30 / portTICK_RATE_MS);
+	cmd = i2c_cmd_link_create();
+	i2c_master_start(cmd);
+	i2c_master_write_byte(cmd, slave_addr << 1 | READ_BIT, ACK_CHECK_EN);
+    if (size > 1) {
+        // ACK_VAL = 0x0 -> receiver must pull data line LOW during HIGH period of acknowledge clock
+    	// pulse in order to acknowledge.
+    	i2c_master_read(cmd, data_rd, size - 1, ACK_VAL);
+
+    }
+    i2c_master_read_byte(cmd, data_rd + size - 1, NACK_VAL);
+    i2c_master_stop(cmd);
+    ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+static esp_err_t i2c_master_write_slave(i2c_port_t i2c_num, uint8_t slave_addr,
+		                               uint8_t subaddr, uint8_t* data_wr, size_t size)
+{
+	/**
+	 * @brief Make i2c master write bytes to slave subaddress.
+	 *        @note
+	 *        Only call this function in I2C master mode
+	 *
+	 * @param i2c_num i2c port to use
+	 * @param slave_addr address of i2c slave to write to
+	 * @param subaddr register to write to
+	 * @param data_rd array to write from
+	 * @param size bytes to write
+	 *
+	 * @return
+	 *     - ESP_OK Success
+	 *     - ESP_ERR_INVALID_ARG Parameter error
+	 */
+
+    if (size == 0) {
+        return ESP_OK;
+    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, ( slave_addr << 1 ) | WRITE_BIT, ACK_CHECK_EN);
+    if (size > 1){
+    	// MSb of SUB field has to be '1' in order for SUB to automatically
+    	// increment to enable multiple data reads/writes.
+    	i2c_master_write_byte(cmd, (subaddr | 0x80), ACK_CHECK_EN);
+    } else {
+    	i2c_master_write_byte(cmd, subaddr, ACK_CHECK_EN);
+    }
+    if (size > 1) {
+        // ACK_VAL = 0x0 -> receiver must pull data line LOW during HIGH period of acknowledge clock
+    	// pulse in order to acknowledge.
+    	i2c_master_write(cmd, data_wr, size - 1, ACK_VAL);
+
+    }
+    i2c_master_write_byte(cmd, data_wr + size - 1, NACK_VAL);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_num, cmd, 1000 / portTICK_RATE_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
